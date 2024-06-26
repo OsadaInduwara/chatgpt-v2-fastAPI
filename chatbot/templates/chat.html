@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT-like Interface</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-sidebar">
+            {% for thread in threads %}
+                <div class="chat-summary" data-thread-id="{{ thread.id }}">
+                    <p><strong>Chat {{ thread.id }}</strong></p>
+                    <p>{{ thread.messages[-1].content if thread.messages else '' }}</p>
+                    <button class="delete-thread" data-thread-id="{{ thread.id }}">Delete</button>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="chat-main">
+            <div class="chat-box" id="chat-box">
+                {% if selected_thread %}
+                    {% for message in selected_thread.messages %}
+                        <div class="message {{ 'user' if message.role == 'user' else 'assistant' }}">
+                            <p>{{ message.content }}</p>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No active chats. Start a new chat!</p>
+                {% endif %}
+            </div>
+            <form id="message-form" method="post" action="/send_message">
+                <input type="hidden" name="thread_id" id="thread-id" value="{{ selected_thread.id if selected_thread else (threads[-1].id if threads else 0) }}">
+                <div class="input-group">
+                    <input type="text" name="message" id="message-input" placeholder="Type your message here..." required>
+                    <button type="submit">Send</button>
+                </div>
+            </form>
+            <form method="post" action="/new_thread" class="new-thread-form">
+                <button type="submit">Start New Chat</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        function attachEventListeners() {
+            document.querySelectorAll('.chat-summary').forEach(summary => {
+                summary.addEventListener('click', function() {
+                    const threadId = this.dataset.threadId;
+                    fetch(`/load_thread?thread_id=${threadId}`).then(response => response.text()).then(html => {
+                        document.querySelector('.chat-container').innerHTML = html;
+                        attachEventListeners();
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    });
+                });
+            });
+
+            document.getElementById('message-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                const form = event.target;
+                fetch(form.action, {
+                    method: form.method,
+                    body: new FormData(form)
+                }).then(response => response.text()).then(html => {
+                    document.querySelector('.chat-container').innerHTML = html;
+                    attachEventListeners();
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                });
+            });
+
+            document.querySelector('.new-thread-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                fetch('/new_thread', {
+                    method: 'post'
+                }).then(response => response.text()).then(html => {
+                    document.querySelector('.chat-container').innerHTML = html;
+                    attachEventListeners();
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                });
+            });
+
+            document.querySelectorAll('.delete-thread').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.stopPropagation(); // Prevent opening the thread when deleting
+                    const threadId = this.dataset.threadId;
+                    fetch(`/delete_thread?thread_id=${threadId}`, {
+                        method: 'post'
+                    }).then(response => response.text()).then(html => {
+                        document.querySelector('.chat-container').innerHTML = html;
+                        attachEventListeners();
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    });
+                });
+            });
+        }
+
+        attachEventListeners();
+    </script>
+</body>
+</html>
